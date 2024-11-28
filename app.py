@@ -186,7 +186,7 @@ class ColorFillApp(QMainWindow):
                 # 获取点击位置
                 x = event.pos().x()
                 y = event.pos().y()
-                self.mode_paint_bucket(x, y, 0.6)
+                self.mode_paint_bucket(x, y)
 
     def fill_color(self, x, y):
         if self.image:
@@ -235,35 +235,7 @@ class ColorFillApp(QMainWindow):
         self.log_display.append("\n".join(self.log_messages))  # 将最新的三条日志显示出来
 
 # mode bucket
-
-    def get_colored_area_mask(self, img, x, y, tolerance=50):
-        """ 获取填色区域的形状，返回一个二值化的区域掩码 """
-        width, height = img.size
-        pixels = img.load()
-
-        target_color = img.getpixel((x, y))
-
-        # 使用Flood Fill来获取当前颜色区域
-        mask = np.zeros((height, width), dtype=np.uint8)
-
-        def flood_fill(x, y):
-            if x < 0 or y < 0 or x >= width or y >= height:
-                return
-            if mask[y, x] == 1:
-                return
-            current_color = pixels[x, y]
-            if self.color_similarity(current_color, target_color, tolerance):
-                mask[y, x] = 1
-                flood_fill(x + 1, y)
-                flood_fill(x - 1, y)
-                flood_fill(x, y + 1)
-                flood_fill(x, y - 1)
-
-        flood_fill(x, y)
-        
-        return mask
-
-    def mode_paint_bucket(self, x, y, iou_threshold=0.5):
+    def mode_paint_bucket(self, x, y, iou_threshold=0.25):
         """ 模式颜料桶功能 """
         if self.image:
             # 保存当前图像状态，用于撤销
@@ -298,16 +270,18 @@ class ColorFillApp(QMainWindow):
 
                     # 5. 计算IOU值
                     iou = calculate_iou(initial_mask, temp_mask)
+                    print(f"[debug] iou = {iou}") # debug
                     
                     # 6. 标记 vis 数组，而且如果IOU大于阈值，则填充该区域
                     for dx in range(mask_width):
                         for dy in range(mask_height):
-                            visited[i + dx, j + dy] = 1
-                            if iou > iou_threshold:
-                                if temp_mask[dy + top, dx + left] == 1:
-                                    pixels[i + dx, j + dy] = self.fill_color
+                            # if 0 <= j + dy < height and 0 <= i + dx < width:
+                            visited[j + dy, i + dx] = 1
                     
                     if iou > iou_threshold:
+                        ImageDraw.floodfill(
+                            img, (i, j), self.current_color, thresh=self.tolerance
+                        )
                         print(f"发现一处模式匹配，已填色")
                         self.printLog(f"发现一处模式匹配，已填色: {self.current_color}")
                         self.image = img
