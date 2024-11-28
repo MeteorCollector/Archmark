@@ -1,0 +1,8 @@
+**/test/*
+**/data/*
+*.pdf
+*.jpg
+*.png
+*.pyc
+*.pyo
+*.pyi
