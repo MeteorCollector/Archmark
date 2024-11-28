@@ -2,6 +2,8 @@ from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QPushButton, QVBox
 from PyQt5.QtGui import QPixmap, QImage, QColor
 from PyQt5.QtCore import Qt
 from PIL import Image, ImageDraw
+import numpy as np
+from util import *
 
 class ColorFillApp(QMainWindow):
     def __init__(self):
@@ -40,6 +42,8 @@ class ColorFillApp(QMainWindow):
         # 功能按钮
         paint_bucket_button = QPushButton("[工具] 普通的颜料桶")
         paint_bucket_button.clicked.connect(self.select_paint_bucket)
+        mode_bucket_button = QPushButton("[工具] 模式匹配颜料桶")
+        mode_bucket_button.clicked.connect(self.select_mode_bucket)
 
         # 容差滑块
         self.tolerance_label = QLabel("容差:")
@@ -71,6 +75,7 @@ class ColorFillApp(QMainWindow):
         # 工具
         tool_layout = QVBoxLayout()
         tool_layout.addWidget(paint_bucket_button)
+        tool_layout.addWidget(mode_bucket_button)
 
         color_layout = QVBoxLayout()
         color_layout.addWidget(self.tolerance_label)
@@ -106,6 +111,11 @@ class ColorFillApp(QMainWindow):
         """ 选择颜料桶工具 """
         self.current_tool = 'paint_bucket'
         self.printLog("已选择很普通的颜料桶工具")
+    
+    def select_mode_bucket(self):
+        """ 选择模式颜料桶工具 """
+        self.current_tool = 'mode_bucket'
+        self.printLog("已选择比较厉害的模式颜料桶工具")
 
     def create_color_palette(self):
         """ 创建颜色调色盘，返回一个 QGridLayout """
@@ -165,12 +175,18 @@ class ColorFillApp(QMainWindow):
         return qimage
 
     def mouse_click_event(self, event):
-        if self.image and self.current_tool == 'paint_bucket':
-            # 获取点击位置
-            x = event.pos().x()
-            y = event.pos().y()
-            self.printLog(f"点击位置 ({x}, {y}), 当前颜色: {self.current_color}, 容差: {self.tolerance}, 正在填色中")
-            self.fill_color(x, y)
+        if self.image:
+            if self.current_tool == 'paint_bucket':
+                # 获取点击位置
+                x = event.pos().x()
+                y = event.pos().y()
+                self.printLog(f"点击位置 ({x}, {y}), 当前颜色: {self.current_color}, 容差: {self.tolerance}, 正在填色中")
+                self.fill_color(x, y)
+            if self.current_tool == 'mode_bucket':
+                # 获取点击位置
+                x = event.pos().x()
+                y = event.pos().y()
+                self.mode_paint_bucket(x, y, 0.6)
 
     def fill_color(self, x, y):
         if self.image:
@@ -217,6 +233,94 @@ class ColorFillApp(QMainWindow):
         # 更新显示的日志
         self.log_display.clear()  # 清空现有内容
         self.log_display.append("\n".join(self.log_messages))  # 将最新的三条日志显示出来
+
+# mode bucket
+
+    def get_colored_area_mask(self, img, x, y, tolerance=50):
+        """ 获取填色区域的形状，返回一个二值化的区域掩码 """
+        width, height = img.size
+        pixels = img.load()
+
+        target_color = img.getpixel((x, y))
+
+        # 使用Flood Fill来获取当前颜色区域
+        mask = np.zeros((height, width), dtype=np.uint8)
+
+        def flood_fill(x, y):
+            if x < 0 or y < 0 or x >= width or y >= height:
+                return
+            if mask[y, x] == 1:
+                return
+            current_color = pixels[x, y]
+            if self.color_similarity(current_color, target_color, tolerance):
+                mask[y, x] = 1
+                flood_fill(x + 1, y)
+                flood_fill(x - 1, y)
+                flood_fill(x, y + 1)
+                flood_fill(x, y - 1)
+
+        flood_fill(x, y)
+        
+        return mask
+
+    def mode_paint_bucket(self, x, y, iou_threshold=0.5):
+        """ 模式颜料桶功能 """
+        if self.image:
+            # 保存当前图像状态，用于撤销
+            self.history.append(self.image.copy())
+            self.redo_stack.clear()  # 清除重做栈
+
+            img = self.image.copy()  # 使用副本
+
+            width, height = img.size
+            pixels = img.load()
+
+            # 创建访问标记数组
+            visited = np.zeros((height, width), dtype=bool)
+
+            # 1. 使用get_flood_mask获取初次填色的区域掩码
+            initial_mask = get_flood_mask(img, x, y, self.tolerance, visited)
+
+            # 2. 获取填充区域的边界框
+            top, bottom, left, right = get_bounding_box(initial_mask)
+            mask_height, mask_width = bottom - top + 1, right - left + 1
+            print(f"Initial fill bounding box: {(left, top, right, bottom)}")
+
+            # 3. 使用访问标记数组避免重复枚举
+            for i in range(width - mask_width):
+                for j in range(height - mask_height):
+                    # 跳过已经访问过的位置
+                    if visited[j, i]:
+                        continue
+
+                    # 4. 尝试从当前位置获取填充掩码，并获取新的区域掩码
+                    temp_mask = get_flood_mask(img, i, j, self.tolerance, visited)
+
+                    # 5. 计算IOU值
+                    iou = calculate_iou(initial_mask, temp_mask)
+                    
+                    # 6. 标记 vis 数组，而且如果IOU大于阈值，则填充该区域
+                    for dx in range(mask_width):
+                        for dy in range(mask_height):
+                            visited[i + dx, j + dy] = 1
+                            if iou > iou_threshold:
+                                if temp_mask[dy + top, dx + left] == 1:
+                                    pixels[i + dx, j + dy] = self.fill_color
+                    
+                    if iou > iou_threshold:
+                        print(f"发现一处模式匹配，已填色")
+                        self.printLog(f"发现一处模式匹配，已填色: {self.current_color}")
+                        self.image = img
+                        self.display_image()
+            
+            print(f"点击位置 ({x}, {y}), 填充颜色: {self.current_color}")
+
+            self.printLog(f"模式颜料桶填色成功！当前填充颜色: {self.current_color}")
+
+            # 更新图像并显示
+            self.image = img
+            self.display_image()
+
 
 
 if __name__ == "__main__":
