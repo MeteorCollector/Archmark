@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QPushButton, QVBoxLayout, QFileDialog, QHBoxLayout, QGridLayout, QColorDialog, QTextEdit, QSlider
+from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QPushButton, QVBoxLayout, QFileDialog, QHBoxLayout, QGridLayout, QColorDialog, QTextEdit, QSlider, QAction
 from PyQt5.QtGui import QPixmap, QImage, QColor, QTextCursor, QTextCharFormat
 from PyQt5.QtCore import Qt
 from PIL import Image, ImageDraw
@@ -9,6 +9,7 @@ class ColorFillApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.image = None
+        self.log_count = 12
         self.history = []
         self.redo_stack = []
         self.current_color = (255, 0, 0)  # 默认红色
@@ -19,9 +20,10 @@ class ColorFillApp(QMainWindow):
         self.debug = False
 
         self.initUI()
+        self.resize(1920, 1080)
 
     def initUI(self):
-        self.setWindowTitle("批量填色程序")
+        self.setWindowTitle("Archmark v0.0")
         self.setGeometry(100, 100, 1200, 800)
 
         # 创建QLabel并包裹在QScrollArea中
@@ -34,8 +36,6 @@ class ColorFillApp(QMainWindow):
         scroll_area.setWidgetResizable(True)
 
         # 按钮
-        self.open_btn = QPushButton("打开文件")
-        self.open_btn.clicked.connect(self.open_file)
         self.undo_btn = QPushButton("撤销")
         self.undo_btn.clicked.connect(self.undo)
         self.redo_btn = QPushButton("重做")
@@ -47,8 +47,11 @@ class ColorFillApp(QMainWindow):
         mode_bucket_button = QPushButton("[工具] 模式匹配颜料桶")
         mode_bucket_button.clicked.connect(self.select_mode_bucket)
 
+        # 当前功能
+        self.tool_label = QLabel(f"当前工具：暂无")
+
         # 容差滑块
-        self.tolerance_label = QLabel("容差:")
+        self.tolerance_label = QLabel(f"容差: {self.tolerance}")
         self.tolerance_slider = QSlider(Qt.Horizontal)
         self.tolerance_slider.setRange(0, 255)
         self.tolerance_slider.setValue(50)
@@ -70,7 +73,6 @@ class ColorFillApp(QMainWindow):
 
         # 布局
         control_layout = QVBoxLayout()
-        control_layout.addWidget(self.open_btn)
         control_layout.addWidget(self.undo_btn)
         control_layout.addWidget(self.redo_btn)
 
@@ -78,6 +80,7 @@ class ColorFillApp(QMainWindow):
         tool_layout = QVBoxLayout()
         tool_layout.addWidget(paint_bucket_button)
         tool_layout.addWidget(mode_bucket_button)
+        tool_layout.addWidget(self.tool_label)
 
         color_layout = QVBoxLayout()
         color_layout.addWidget(self.tolerance_label)
@@ -106,18 +109,35 @@ class ColorFillApp(QMainWindow):
         central_widget = QLabel()
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
+        self.create_menu()
 
         self.image_label.mousePressEvent = self.mouse_click_event  # 绑定点击事件
     
+    def create_menu(self):
+        """ 创建菜单栏和保存动作 """
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("文件 Files")
+        
+        save_action = QAction("保存 Save", self)
+        save_action.triggered.connect(self.save_image)
+
+        load_action = QAction("导入文件(PDF或者图片) Import File", self)
+        load_action.triggered.connect(self.open_file)
+        
+        file_menu.addAction(load_action)
+        file_menu.addAction(save_action)
+        
     def select_paint_bucket(self):
         """ 选择颜料桶工具 """
         self.current_tool = 'paint_bucket'
-        self.printLog("已选择很普通的颜料桶工具")
+        self.printLog("已选择很普通的颜料桶工具", color="blue", isBold=True)
+        self.tool_label.setText("当前工具：普通颜料桶")
     
     def select_mode_bucket(self):
         """ 选择模式颜料桶工具 """
         self.current_tool = 'mode_bucket'
-        self.printLog("已选择比较厉害的模式颜料桶工具")
+        self.printLog("已选择比较厉害的模式颜料桶工具", color="blue", isBold=True)
+        self.tool_label.setText("当前工具：模式颜料桶")
 
     def create_color_palette(self):
         """ 创建颜色调色盘，返回一个 QGridLayout """
@@ -146,8 +166,7 @@ class ColorFillApp(QMainWindow):
     
     def update_tolerance(self):
         self.tolerance = self.tolerance_slider.value()
-        print(f"当前容差值: {self.tolerance}")
-        self.printLog(f"当前容差值: {self.tolerance}")
+        self.tolerance_label.setText(f"容差: {self.tolerance}")
 
     def open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "打开文件", "", "PDF Files (*.pdf);;Image Files (*.png *.jpg *.bmp)")
@@ -175,6 +194,24 @@ class ColorFillApp(QMainWindow):
         data = image.tobytes("raw", "RGBA")
         qimage = QImage(data, image.width, image.height, QImage.Format_RGBA8888)
         return qimage
+    
+    def save_image(self):
+        """ 保存当前图像到指定路径 """
+        if self.image is not None:
+            # 打开文件保存对话框
+            file_path, _ = QFileDialog.getSaveFileName(self, "保存图片", "", "PNG 图片 (*.png);;JPEG 图片 (*.jpg *.jpeg);;所有文件 (*.*)")
+
+            if file_path:
+                # 如果文件路径不为空，保存图片
+                self.image.save(file_path)  # 使用PIL.Image.save保存图片
+                print(f"图片已保存到: {file_path}")
+                self.printLog(f"图片已保存到: {file_path}", color="green", isBold=True)
+            else:
+                print("保存操作被取消")
+                self.printLog("保存操作被取消", color="red", isBold=True)
+        else:
+            print("没有图像可保存")
+            self.printLog("没有图像可保存", color="red", isBold=True)
 
     def mouse_click_event(self, event):
         if self.image:
@@ -205,7 +242,7 @@ class ColorFillApp(QMainWindow):
             ImageDraw.floodfill(
                 img, (x, y), self.current_color, thresh=self.tolerance
             )
-            self.printLog(f"填色成功！当前填充颜色: {self.current_color}", color="green")
+            self.printLog(f"填色成功！当前填充颜色: {self.current_color}", color="green", isBold=True)
 
             # 更新图像并显示
             self.image = img
@@ -216,23 +253,27 @@ class ColorFillApp(QMainWindow):
             self.redo_stack.append(self.image)
             self.image = self.history.pop()
             self.display_image()
+            self.printLog(f"已撤销", color="blue", isBold=True)
 
     def redo(self):
         if self.redo_stack:
             self.history.append(self.image)
             self.image = self.redo_stack.pop()
             self.display_image()
+            self.printLog(f"已重做", color="blue", isBold=True)
 
-    def printLog(self, message, color="black"):
+    def printLog(self, message, color="black", isBold=False):
         """ 打印日志信息，并支持自定义颜色 """
         # 为每条日志设置HTML格式
+        if isBold is True:
+            message = f'<b>{message}</b>'
         log_message_html = f'<font color="{color}">{message}</font><br>'
         
         # 添加新日志到列表
         self.log_messages.append(log_message_html)
         
         # 如果日志太多，删除最旧的日志
-        if len(self.log_messages) > 24:
+        if len(self.log_messages) > self.log_count:
             self.log_messages.pop(0)
 
         # 更新显示的日志，将所有日志条目连接为单一HTML字符串
@@ -248,6 +289,8 @@ class ColorFillApp(QMainWindow):
             # 保存当前图像状态，用于撤销
             self.history.append(self.image.copy())
             self.redo_stack.clear()  # 清除重做栈
+            self.printLog(f"模式颜料桶正在运行中，请暂时不要进行别的操作...", color="red", isBold=True)
+            QApplication.processEvents()
 
             img = self.image.copy()  # 使用副本
 
@@ -295,14 +338,14 @@ class ColorFillApp(QMainWindow):
                             pixels[px, py] = self.current_color
                         print(f"发现一处模式匹配，已填色")
                         self.printLog(f"发现一处模式匹配，已填色: {self.current_color}")
-                        self.printLog(f"模式颜料桶正在运行中，请暂时不要进行别的操作...", color="orange")
+                        self.printLog(f"模式颜料桶正在运行中，请暂时不要进行别的操作...", color="red", isBold=True)
                         QApplication.processEvents()
                         self.image = img
                         self.display_image()
             
             print(f"点击位置 ({x}, {y}), 填充颜色: {self.current_color}")
 
-            self.printLog(f"模式颜料桶填色成功！当前填充颜色: {self.current_color}", color="green")
+            self.printLog(f"模式颜料桶填色成功！当前填充颜色: {self.current_color}", color="green", isBold=True)
 
             # 更新图像并显示
             self.image = img
