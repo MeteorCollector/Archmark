@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QPushButton, QVBoxLayout, QFileDialog, QHBoxLayout, QGridLayout, QColorDialog, QTextEdit, QSlider
-from PyQt5.QtGui import QPixmap, QImage, QColor
+from PyQt5.QtGui import QPixmap, QImage, QColor, QTextCursor, QTextCharFormat
 from PyQt5.QtCore import Qt
 from PIL import Image, ImageDraw
 import numpy as np
@@ -205,7 +205,7 @@ class ColorFillApp(QMainWindow):
             ImageDraw.floodfill(
                 img, (x, y), self.current_color, thresh=self.tolerance
             )
-            self.printLog(f"填色成功！当前填充颜色: {self.current_color}")
+            self.printLog(f"填色成功！当前填充颜色: {self.current_color}", color="green")
 
             # 更新图像并显示
             self.image = img
@@ -223,18 +223,22 @@ class ColorFillApp(QMainWindow):
             self.image = self.redo_stack.pop()
             self.display_image()
 
-    def printLog(self, message):
-        """ 打印日志信息，保持最新的三条日志 """
+    def printLog(self, message, color="black"):
+        """ 打印日志信息，并支持自定义颜色 """
+        # 为每条日志设置HTML格式
+        log_message_html = f'<font color="{color}">{message}</font><br>'
+        
         # 添加新日志到列表
-        self.log_messages.append(message)
+        self.log_messages.append(log_message_html)
         
-        # 如果日志超过三条，删除最旧的日志
-        if len(self.log_messages) > 20:
+        # 如果日志太多，删除最旧的日志
+        if len(self.log_messages) > 24:
             self.log_messages.pop(0)
-        
-        # 更新显示的日志
-        self.log_display.clear()  # 清空现有内容
-        self.log_display.append("\n".join(self.log_messages))  # 将最新的三条日志显示出来
+
+        # 更新显示的日志，将所有日志条目连接为单一HTML字符串
+        log_html = "".join(self.log_messages)
+        self.log_display.setHtml(log_html)
+
 
 # mode bucket
     def mode_paint_bucket(self, x, y, iou_threshold=0.6):
@@ -291,12 +295,14 @@ class ColorFillApp(QMainWindow):
                             pixels[px, py] = self.current_color
                         print(f"发现一处模式匹配，已填色")
                         self.printLog(f"发现一处模式匹配，已填色: {self.current_color}")
+                        self.printLog(f"模式颜料桶正在运行中，请暂时不要进行别的操作...", color="orange")
+                        QApplication.processEvents()
                         self.image = img
                         self.display_image()
             
             print(f"点击位置 ({x}, {y}), 填充颜色: {self.current_color}")
 
-            self.printLog(f"模式颜料桶填色成功！当前填充颜色: {self.current_color}")
+            self.printLog(f"模式颜料桶填色成功！当前填充颜色: {self.current_color}", color="green")
 
             # 更新图像并显示
             self.image = img
