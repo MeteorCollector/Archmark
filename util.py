@@ -116,23 +116,23 @@ def get_flood_mask(img, x, y, tolerance, k=10):
                     fill_pixels.append((nx, ny))
     
     # 随机选取 k 个点，计算它们的距离
-    def distance_to_edge(x, y):
-        """ 计算坐标 (x, y) 到四个边缘的最小距离 """
-        return min(x, width - x - 1, y, height - y - 1)
+    # def distance_to_edge(x, y):
+    #     """ 计算坐标 (x, y) 到四个边缘的最小距离 """
+    #     return min(x, width - x - 1, y, height - y - 1)
 
-    # 随机选择 k 个像素点
-    random_pixels = random.sample(fill_pixels, min(k, len(fill_pixels)))
+    # # 随机选择 k 个像素点
+    # random_pixels = random.sample(fill_pixels, min(k, len(fill_pixels)))
 
     # 计算距离边缘最远的像素
-    max_distance = -1
-    central_pixel = None
-    for px, py in random_pixels:
-        dist = distance_to_edge(px, py)
-        if dist > max_distance:
-            max_distance = dist
-            central_pixel = (px, py)
+    # max_distance = -1
+    # central_pixel = None
+    # for px, py in random_pixels:
+    #     dist = distance_to_edge(px, py)
+    #     if dist > max_distance:
+    #         max_distance = dist
+    #         central_pixel = (px, py)
 
-    return mask, central_pixel
+    return mask, fill_pixels
 
 def get_bounding_box(mask):
     """ 获取填充区域的最小矩形边界 """
