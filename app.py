@@ -253,7 +253,7 @@ class ColorFillApp(QMainWindow):
             visited = np.zeros((height, width), dtype=bool)
 
             # 1. 使用get_flood_mask获取初次填色的区域掩码
-            initial_mask = get_flood_mask(img, x, y, fixed_tolerance)
+            initial_mask, _ = get_flood_mask(img, x, y, fixed_tolerance)
 
             # 2. 获取填充区域的边界框
             top, bottom, left, right = get_bounding_box(initial_mask)
@@ -268,7 +268,7 @@ class ColorFillApp(QMainWindow):
                         continue
 
                     # 4. 尝试从当前位置获取填充掩码，并获取新的区域掩码
-                    temp_mask = get_flood_mask(img, i, j, fixed_tolerance)
+                    temp_mask, central_point = get_flood_mask(img, i, j, fixed_tolerance)
                     visited = np.logical_or(visited, temp_mask)
 
                     # 5. 计算IOU值
@@ -284,7 +284,7 @@ class ColorFillApp(QMainWindow):
                     
                     if iou > iou_threshold:
                         ImageDraw.floodfill(
-                            img, (i, j), self.current_color, thresh=self.tolerance
+                            img, central_point, self.current_color, thresh=fixed_tolerance
                         )
                         print(f"发现一处模式匹配，已填色")
                         self.printLog(f"发现一处模式匹配，已填色: {self.current_color}")

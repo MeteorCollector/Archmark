@@ -4,6 +4,7 @@ from collections import deque
 import matplotlib.pyplot as plt
 from PIL import Image
 import os
+import random
 
 def calculate_iou(region1, region2, debug=False):
     # 获取每个掩码的边界框
@@ -80,13 +81,14 @@ def color_similarity(c1, c2, threshold=50):
     distance = math.sqrt(r_diff**2 + g_diff**2 + b_diff**2)
     return distance < threshold
 
-def get_flood_mask(img, x, y, tolerance):
+def get_flood_mask(img, x, y, tolerance, k=10):
     """ 获取Flood Fill区域的掩码，用于标记填充区域，使用BFS代替递归 """
     width, height = img.size
     pixels = img.load()
 
     # 获取点击位置的颜色
     target_color = pixels[x, y]
+    fill_pixels = []
 
     # 创建一个mask标记当前填充区域
     mask = np.zeros((height, width), dtype=np.uint8)
@@ -111,8 +113,26 @@ def get_flood_mask(img, x, y, tolerance):
                     visited[ny, nx] = True  # 标记为已访问
                     mask[ny, nx] = 1  # 标记为填充区域
                     queue.append((nx, ny))  # 将邻居加入队列，等待处理
+                    fill_pixels.append((nx, ny))
+    
+    # 随机选取 k 个点，计算它们的距离
+    def distance_to_edge(x, y):
+        """ 计算坐标 (x, y) 到四个边缘的最小距离 """
+        return min(x, width - x - 1, y, height - y - 1)
 
-    return mask
+    # 随机选择 k 个像素点
+    random_pixels = random.sample(fill_pixels, min(k, len(fill_pixels)))
+
+    # 计算距离边缘最远的像素
+    max_distance = -1
+    central_pixel = None
+    for px, py in random_pixels:
+        dist = distance_to_edge(px, py)
+        if dist > max_distance:
+            max_distance = dist
+            central_pixel = (px, py)
+
+    return mask, central_pixel
 
 def get_bounding_box(mask):
     """ 获取填充区域的最小矩形边界 """
