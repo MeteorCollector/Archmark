@@ -1,13 +1,19 @@
 import numpy as np
 import math
 from collections import deque
+import matplotlib.pyplot as plt
+from PIL import Image
+import os
 
-def calculate_iou(region1, region2):
+def calculate_iou(region1, region2, debug=False):
     # 获取每个掩码的边界框
     top1, bottom1, left1, right1 = get_bounding_box(region1)
     top2, bottom2, left2, right2 = get_bounding_box(region2)
-    print(f"[debug] top1 = {top1}, bottom1 = {bottom1}, left1 = {left1}, right1 = {right1}")
-    print(f"[debug] top2 = {top2}, bottom2 = {bottom2}, left2 = {left2}, right2 = {right2}")
+    if top1 == bottom1 or top2 == bottom2 or left1 == right1 or left2 == right2:
+        return 0.0
+    
+    # print(f"[debug] top1 = {top1}, bottom1 = {bottom1}, left1 = {left1}, right1 = {right1}")
+    # print(f"[debug] top2 = {top2}, bottom2 = {bottom2}, left2 = {left2}, right2 = {right2}")
 
     # 裁切掩码到有效区域
     region1_cropped = region1[top1:bottom1+1, left1:right1+1]
@@ -29,7 +35,43 @@ def calculate_iou(region1, region2):
     intersection = np.sum(np.logical_and(region1_resized, region2_resized))
     union = np.sum(np.logical_or(region1_resized, region2_resized))
 
-    return intersection / union if union != 0 else 0
+    iou_value = intersection / union if union != 0 else 0
+
+    # 如果是调试模式，保存掩码图像
+    if debug:
+        # 创建目录
+        debug_dir = './test/debug'
+        os.makedirs(debug_dir, exist_ok=True)
+
+        # 文件名：iou数值 + region1/region2/union
+        filename = os.path.join(debug_dir, f"{iou_value:.6f}_iou.png")
+
+        # 创建并保存图片
+        fig, axes = plt.subplots(4, 1, figsize=(15, 15))
+        axes[0].imshow(np.logical_not(region1), cmap='gray')
+        axes[0].set_title('Region 1')
+        axes[0].axis('off')
+
+        axes[1].imshow(np.logical_not(region2), cmap='gray')
+        axes[1].set_title('Region 2')
+        axes[1].axis('off')
+
+        union_mask = np.logical_not(np.logical_or(region1_resized, region2_resized)).astype(np.uint8)
+        axes[2].imshow(union_mask, cmap='gray')
+        axes[2].set_title('Union')
+        axes[2].axis('off')
+
+        union_mask = np.logical_not(np.logical_and(region1_resized, region2_resized)).astype(np.uint8)
+        axes[3].imshow(union_mask, cmap='gray')
+        axes[3].set_title('Intersection')
+        axes[3].axis('off')
+
+        # 保存图像
+        plt.tight_layout()
+        plt.savefig(filename)
+        plt.close(fig)
+
+    return iou_value
 
 def color_similarity(c1, c2, threshold=50):
     r_diff = c1[0] - c2[0]
@@ -38,7 +80,7 @@ def color_similarity(c1, c2, threshold=50):
     distance = math.sqrt(r_diff**2 + g_diff**2 + b_diff**2)
     return distance < threshold
 
-def get_flood_mask(img, x, y, tolerance, visited):
+def get_flood_mask(img, x, y, tolerance):
     """ 获取Flood Fill区域的掩码，用于标记填充区域，使用BFS代替递归 """
     width, height = img.size
     pixels = img.load()
@@ -48,6 +90,7 @@ def get_flood_mask(img, x, y, tolerance, visited):
 
     # 创建一个mask标记当前填充区域
     mask = np.zeros((height, width), dtype=np.uint8)
+    visited = np.zeros((height, width), dtype=bool)
     
     # 使用BFS实现填充
     queue = deque([(x, y)])  # 队列初始化，存储待处理的像素位置

@@ -16,6 +16,8 @@ class ColorFillApp(QMainWindow):
         self.log_messages = []  # 存储日志的列表
         self.current_tool = None  # 当前工具
 
+        self.debug = False
+
         self.initUI()
 
     def initUI(self):
@@ -235,8 +237,9 @@ class ColorFillApp(QMainWindow):
         self.log_display.append("\n".join(self.log_messages))  # 将最新的三条日志显示出来
 
 # mode bucket
-    def mode_paint_bucket(self, x, y, iou_threshold=0.25):
+    def mode_paint_bucket(self, x, y, iou_threshold=0.6):
         """ 模式颜料桶功能 """
+        fixed_tolerance = 30.0
         if self.image:
             # 保存当前图像状态，用于撤销
             self.history.append(self.image.copy())
@@ -245,13 +248,12 @@ class ColorFillApp(QMainWindow):
             img = self.image.copy()  # 使用副本
 
             width, height = img.size
-            pixels = img.load()
 
             # 创建访问标记数组
             visited = np.zeros((height, width), dtype=bool)
 
             # 1. 使用get_flood_mask获取初次填色的区域掩码
-            initial_mask = get_flood_mask(img, x, y, self.tolerance, visited)
+            initial_mask = get_flood_mask(img, x, y, fixed_tolerance)
 
             # 2. 获取填充区域的边界框
             top, bottom, left, right = get_bounding_box(initial_mask)
@@ -266,17 +268,19 @@ class ColorFillApp(QMainWindow):
                         continue
 
                     # 4. 尝试从当前位置获取填充掩码，并获取新的区域掩码
-                    temp_mask = get_flood_mask(img, i, j, self.tolerance, visited)
+                    temp_mask = get_flood_mask(img, i, j, fixed_tolerance)
+                    visited = np.logical_or(visited, temp_mask)
 
                     # 5. 计算IOU值
-                    iou = calculate_iou(initial_mask, temp_mask)
-                    print(f"[debug] iou = {iou}") # debug
+                    iou = calculate_iou(initial_mask, temp_mask, self.debug)
+                    # print(f"[debug] iou = {iou}") # debug
                     
                     # 6. 标记 vis 数组，而且如果IOU大于阈值，则填充该区域
-                    for dx in range(mask_width):
-                        for dy in range(mask_height):
-                            # if 0 <= j + dy < height and 0 <= i + dx < width:
-                            visited[j + dy, i + dx] = 1
+                    # for dx in range(mask_width):
+                    #     for dy in range(mask_height):
+                    #         # if 0 <= j + dy < height and 0 <= i + dx < width:
+                    #         if temp_mask[j + dy, i + dx] == 1:
+                    #             visited[j + dy, i + dx] = 1
                     
                     if iou > iou_threshold:
                         ImageDraw.floodfill(
