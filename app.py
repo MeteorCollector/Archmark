@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QPushButton, QVBoxLayout, QFileDialog, QHBoxLayout, QGridLayout, QColorDialog, QTextEdit, QSlider, QAction
-from PyQt5.QtGui import QPixmap, QImage, QColor, QTextCursor, QTextCharFormat
+from PyQt5.QtGui import QPixmap, QImage, QColor, QTextCursor, QTextCharFormat, QTransform
 from PyQt5.QtCore import Qt
 from PIL import Image, ImageDraw
 import numpy as np
@@ -16,6 +16,8 @@ class ColorFillApp(QMainWindow):
         self.tolerance = 36  # 默认容差
         self.log_messages = []  # 存储日志的列表
         self.current_tool = None  # 当前工具
+        self.scale_factor = 1.0
+        self.original_pixmap = None
 
         self.debug = False
 
@@ -29,6 +31,8 @@ class ColorFillApp(QMainWindow):
         # 创建QLabel并包裹在QScrollArea中
         self.image_label = QLabel(self)
         self.image_label.setAlignment(Qt.AlignCenter)
+        # self.image_label.setFixedSize(1024, 768)  # 初始化为固定大小
+        self.image_label.wheelEvent = self.on_wheel_event
         
         # 创建QScrollArea，允许图像滚动查看
         scroll_area = QScrollArea(self)
@@ -175,6 +179,7 @@ class ColorFillApp(QMainWindow):
                 self.image = self.rasterize_pdf(file_path)
             else:
                 self.image = Image.open(file_path)
+            self.scale_factor = 1.0
             self.display_image()
 
     def rasterize_pdf(self, file_path):
@@ -187,7 +192,14 @@ class ColorFillApp(QMainWindow):
     def display_image(self):
         if self.image:
             qt_image = self.pil_to_qimage(self.image)
-            self.image_label.setPixmap(QPixmap.fromImage(qt_image))
+            mypixmap = QPixmap.fromImage(qt_image)
+            # self.image_label.setPixmap(mypixmap)
+            self.original_pixmap = mypixmap
+
+            transform = QTransform()
+            transform.scale(self.scale_factor, self.scale_factor)
+            scaled_pixmap = self.original_pixmap.transformed(transform)
+            self.image_label.setPixmap(scaled_pixmap)
 
     def pil_to_qimage(self, image):
         image = image.convert("RGBA")
@@ -215,17 +227,43 @@ class ColorFillApp(QMainWindow):
 
     def mouse_click_event(self, event):
         if self.image:
+            # 获取点击位置
+            x = int(event.pos().x() / self.scale_factor)
+            y = int(event.pos().y() / self.scale_factor)
             if self.current_tool == 'paint_bucket':
-                # 获取点击位置
-                x = event.pos().x()
-                y = event.pos().y()
+                
                 self.printLog(f"点击位置 ({x}, {y}), 当前颜色: {self.current_color}, 容差: {self.tolerance}, 正在填色中")
                 self.fill_color(x, y)
             if self.current_tool == 'mode_bucket':
                 # 获取点击位置
-                x = event.pos().x()
-                y = event.pos().y()
                 self.mode_paint_bucket(x, y)
+    
+    def on_wheel_event(self, event):
+        """ 处理鼠标滚轮事件，实现缩放 """
+        # 获取鼠标滚轮的角度，决定是放大还是缩小
+        delta = event.angleDelta().y()  # 正值表示滚动向上（放大），负值表示滚动向下（缩小）
+
+        # 设置缩放因子
+        if delta > 0:  # 放大
+            self.scale_factor *= 1.1
+        else:  # 缩小
+            self.scale_factor /= 1.1
+
+        # 更新QLabel显示的图像
+        self.update_image_display()
+
+    def update_image_display(self):
+        """ 使用QTransform来缩放QPixmap而不改变原始图片 """
+        if self.original_pixmap:
+            # 创建一个QTransform对象来实现缩放
+            transform = QTransform()
+            transform.scale(self.scale_factor, self.scale_factor)
+
+            # 应用缩放变换
+            scaled_pixmap = self.original_pixmap.transformed(transform)
+
+            # 更新QLabel显示的图像
+            self.image_label.setPixmap(scaled_pixmap)
 
     def fill_color(self, x, y):
         if self.image:
