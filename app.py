@@ -35,9 +35,9 @@ class ColorFillApp(QMainWindow):
         self.image_label.wheelEvent = self.on_wheel_event
         
         # 创建QScrollArea，允许图像滚动查看
-        scroll_area = QScrollArea(self)
-        scroll_area.setWidget(self.image_label)
-        scroll_area.setWidgetResizable(True)
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidget(self.image_label)
+        self.scroll_area.setWidgetResizable(True)
 
         # 按钮
         self.undo_btn = QPushButton("撤销")
@@ -106,7 +106,7 @@ class ColorFillApp(QMainWindow):
 
         # 主布局
         main_layout = QHBoxLayout()
-        main_layout.addWidget(scroll_area, 3)
+        main_layout.addWidget(self.scroll_area, 3)
         main_layout.addLayout(sidebar_layout, 1)
         main_layout.addLayout(log_layout, 1)  # 将日志区域添加到布局中
 
@@ -250,17 +250,39 @@ class ColorFillApp(QMainWindow):
             self.scale_factor /= 1.1
 
         # 更新QLabel显示的图像
-        self.update_image_display()
+        self.update_image_display(event.pos(), event.globalPos())
 
-    def update_image_display(self):
-        """ 使用QTransform来缩放QPixmap而不改变原始图片 """
+    def update_image_display(self, mouse_pos, global_pos):
+        """ 使用QTransform来缩放QPixmap，确保缩放围绕鼠标位置 """
         if self.original_pixmap:
+            scroll_pos = self.scroll_area.mapFromGlobal(global_pos)
+
             # 创建一个QTransform对象来实现缩放
             transform = QTransform()
             transform.scale(self.scale_factor, self.scale_factor)
 
             # 应用缩放变换
             scaled_pixmap = self.original_pixmap.transformed(transform)
+
+            # 计算鼠标相对于当前显示区域的比例
+            label_rect = self.image_label.rect()
+            scaled_width = scaled_pixmap.width()
+            scaled_height = scaled_pixmap.height()
+
+            # 计算鼠标位置相对于原始图像的位置
+            mouse_x_ratio = (mouse_pos.x()) / scaled_width
+            mouse_y_ratio = (mouse_pos.y()) / scaled_height
+
+            # 计算新的视图偏移，保持鼠标位置不变
+            scroll_bar_h = self.scroll_area.horizontalScrollBar()
+            scroll_bar_v = self.scroll_area.verticalScrollBar()
+
+            new_x_offset = mouse_x_ratio * scaled_width - (scroll_pos.x() / self.scale_factor)
+            new_y_offset = mouse_y_ratio * scaled_height - (scroll_pos.y() / self.scale_factor)
+
+            # 更新滚动位置，保持鼠标位置在视图中
+            scroll_bar_h.setValue(int(new_x_offset))
+            scroll_bar_v.setValue(int(new_y_offset))
 
             # 更新QLabel显示的图像
             self.image_label.setPixmap(scaled_pixmap)
