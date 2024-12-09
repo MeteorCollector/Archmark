@@ -81,7 +81,7 @@ def color_similarity(c1, c2, threshold=50):
     distance = math.sqrt(r_diff**2 + g_diff**2 + b_diff**2)
     return distance < threshold
 
-def get_flood_mask(img, x, y, tolerance, k=10):
+def get_flood_mask(img, x, y, tolerance):
     """ 获取Flood Fill区域的掩码，用于标记填充区域，使用BFS代替递归 """
     width, height = img.size
     pixels = img.load()

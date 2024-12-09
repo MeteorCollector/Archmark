@@ -6,3 +6,6 @@
 *.pyc
 *.pyo
 *.pyi
+**/__pycache__/*
+**/build/*
+**/dist/*

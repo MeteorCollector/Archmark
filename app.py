@@ -37,6 +37,7 @@ class ColorFillApp(QMainWindow):
         # 创建QScrollArea，允许图像滚动查看
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidget(self.image_label)
+        self.scroll_area.setAlignment(Qt.AlignCenter)
         self.scroll_area.setWidgetResizable(True)
 
         # 按钮
@@ -239,24 +240,35 @@ class ColorFillApp(QMainWindow):
                 self.mode_paint_bucket(x, y)
     
     def on_wheel_event(self, event):
-        """ 处理鼠标滚轮事件，实现缩放 """
+        """处理鼠标滚轮事件，实现缩放"""
         # 获取鼠标滚轮的角度，决定是放大还是缩小
         delta = event.angleDelta().y()  # 正值表示滚动向上（放大），负值表示滚动向下（缩小）
 
         # 设置缩放因子
         if delta > 0:  # 放大
-            self.scale_factor *= 1.1
+            delta_scale = 1.1
         else:  # 缩小
-            self.scale_factor /= 1.1
+            delta_scale = 1 / 1.1
 
-        # 更新QLabel显示的图像
-        self.update_image_display(event.pos(), event.globalPos())
+        # 更新缩放因子
+        self.scale_factor *= delta_scale
 
-    def update_image_display(self, mouse_pos, global_pos):
-        """ 使用QTransform来缩放QPixmap，确保缩放围绕鼠标位置 """
+        # 更新QLabel显示的图像，传递delta_scale
+        self.update_image_display(event.pos(), event.globalPos(), delta_scale)
+
+    def update_image_display(self, mouse_pos, global_pos, delta_scale):
+        """使用QTransform来缩放QPixmap，确保缩放围绕鼠标位置"""
         if self.original_pixmap:
-            scroll_pos = self.scroll_area.mapFromGlobal(global_pos)
+            # 计算鼠标在图像中的相对位置
+            viewport_pos = self.scroll_area.viewport().mapFrom(self, mouse_pos)
+            h_scroll = self.scroll_area.horizontalScrollBar()
+            v_scroll = self.scroll_area.verticalScrollBar()
 
+            # 鼠标相对于当前滚动范围的比例
+            h_ratio = (h_scroll.value() + viewport_pos.x()) / self.image_label.width()
+            v_ratio = (v_scroll.value() + viewport_pos.y()) / self.image_label.height()
+            # print(f'[debug] h_ratio = {h_ratio}, v_ratio = {v_ratio}, delta_scale = {delta_scale}')
+            # print(f'[debug] viewport_pos.x() = {viewport_pos.x()}, viewport_pos.y() = {viewport_pos.y()}')
             # 创建一个QTransform对象来实现缩放
             transform = QTransform()
             transform.scale(self.scale_factor, self.scale_factor)
@@ -264,28 +276,19 @@ class ColorFillApp(QMainWindow):
             # 应用缩放变换
             scaled_pixmap = self.original_pixmap.transformed(transform)
 
-            # 计算鼠标相对于当前显示区域的比例
-            label_rect = self.image_label.rect()
-            scaled_width = scaled_pixmap.width()
-            scaled_height = scaled_pixmap.height()
-
-            # 计算鼠标位置相对于原始图像的位置
-            mouse_x_ratio = (mouse_pos.x()) / scaled_width
-            mouse_y_ratio = (mouse_pos.y()) / scaled_height
-
-            # 计算新的视图偏移，保持鼠标位置不变
-            scroll_bar_h = self.scroll_area.horizontalScrollBar()
-            scroll_bar_v = self.scroll_area.verticalScrollBar()
-
-            new_x_offset = mouse_x_ratio * scaled_width - (scroll_pos.x() / self.scale_factor)
-            new_y_offset = mouse_y_ratio * scaled_height - (scroll_pos.y() / self.scale_factor)
-
-            # 更新滚动位置，保持鼠标位置在视图中
-            scroll_bar_h.setValue(int(new_x_offset))
-            scroll_bar_v.setValue(int(new_y_offset))
-
             # 更新QLabel显示的图像
             self.image_label.setPixmap(scaled_pixmap)
+
+            # 计算缩放后的图像尺寸
+            # new_width = scaled_pixmap.width()
+            # new_height = scaled_pixmap.height()
+
+            h_ratio = (h_scroll.value() + viewport_pos.x() - viewport_pos.x() / delta_scale) / self.image_label.width()
+            v_ratio = (v_scroll.value() + viewport_pos.y() - viewport_pos.y() / delta_scale) / self.image_label.height()
+            # 更新滚动条位置，确保鼠标位置不变
+            h_scroll.setValue(int(h_ratio * self.image_label.width()))
+            v_scroll.setValue(int(v_ratio * self.image_label.height()))
+
 
     def fill_color(self, x, y):
         if self.image:
@@ -342,7 +345,7 @@ class ColorFillApp(QMainWindow):
 
 
 # mode bucket
-    def mode_paint_bucket(self, x, y, iou_threshold=0.6):
+    def mode_paint_bucket(self, x, y, iou_threshold=0.85):
         """ 模式颜料桶功能 """
         fixed_tolerance = 30.0
         if self.image:
