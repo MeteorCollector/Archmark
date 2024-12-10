@@ -66,6 +66,7 @@ for path in paths:
     # print(f'[debug] color = {color}')
     # print(f'[debug] fill = {fill}')
     # print(f'[debug] linecap = {lineCap}')
+    print(f"[debug] drew a '{item[0]}'")
 
     shape.finish(
         fill=fill,
